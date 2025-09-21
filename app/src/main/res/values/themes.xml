@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme compatible con versiones anteriores -->
+    <style name="Theme.NoGracias" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Colores básicos que funcionan en todas las versiones -->
+        <item name="colorPrimary">#3F51B5</item>
+        <item name="colorPrimaryDark">#303F9F</item>
+        <item name="colorAccent">#FF4081</item>
+        <item name="android:textColorPrimary">#212121</item>
+        <item name="android:textColorSecondary">#757575</item>
+    </style>
+</resources>
