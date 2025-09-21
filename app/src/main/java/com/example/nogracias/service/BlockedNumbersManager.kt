@@ -22,20 +22,13 @@ class BlockedNumbersManager(context: Context) {
     }
 
     fun getPrefixes(): List<String> {
-        val json = prefs.getString(KEY_PREFIXES, null) ?: return getDefaultPrefixes()
+        val json = prefs.getString(KEY_PREFIXES, null) ?: return emptyList()
         val type = object : TypeToken<List<String>>() {}.type
         return try {
-            gson.fromJson(json, type) ?: getDefaultPrefixes()
+            gson.fromJson(json, type) ?: emptyList()
         } catch (e: Exception) {
-            getDefaultPrefixes()
+            emptyList()
         }
-    }
-
-    private fun getDefaultPrefixes(): List<String> {
-        return listOf(
-            "600",       // ejemplo global
-            "5699284"    // +56 9 9284 ...
-        )
     }
 
     // ============ NÚMEROS EXACTOS ============
@@ -45,20 +38,13 @@ class BlockedNumbersManager(context: Context) {
     }
 
     fun getExactNumbers(): List<String> {
-        val json = prefs.getString(KEY_EXACT_NUMBERS, null) ?: return getDefaultExactNumbers()
+        val json = prefs.getString(KEY_EXACT_NUMBERS, null) ?: return emptyList()
         val type = object : TypeToken<List<String>>() {}.type
         return try {
-            gson.fromJson(json, type) ?: getDefaultExactNumbers()
+            gson.fromJson(json, type) ?: emptyList()
         } catch (e: Exception) {
-            getDefaultExactNumbers()
+            emptyList()
         }
-    }
-
-    private fun getDefaultExactNumbers(): List<String> {
-        return listOf(
-            "56992849190", // +56 9 9284 9190 -> versión con código país
-            "992849190"    // versión local
-        )
     }
 
     // ============ UTILIDADES ============
@@ -88,5 +74,21 @@ class BlockedNumbersManager(context: Context) {
         val currentNumbers = getExactNumbers().toMutableList()
         currentNumbers.remove(number)
         saveExactNumbers(currentNumbers)
+    }
+
+    // ============ VERIFICACIONES ============
+    fun isEmpty(): Boolean {
+        return getPrefixes().isEmpty() && getExactNumbers().isEmpty()
+    }
+
+    fun getTotalBlockedCount(): Int {
+        return getPrefixes().size + getExactNumbers().size
+    }
+
+    fun clearAll() {
+        prefs.edit()
+            .remove(KEY_PREFIXES)
+            .remove(KEY_EXACT_NUMBERS)
+            .apply()
     }
 }

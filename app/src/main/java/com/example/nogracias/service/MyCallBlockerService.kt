@@ -6,7 +6,6 @@ import android.os.Build
 import android.telecom.Call
 import android.telecom.CallScreeningService
 import android.util.Log
-import androidx.annotation.RequiresApi
 
 class MyCallBlockerService : CallScreeningService() {
 
@@ -15,11 +14,10 @@ class MyCallBlockerService : CallScreeningService() {
 
     override fun onCreate() {
         super.onCreate()
-        prefs = getSharedPreferences("prefixes", Context.MODE_PRIVATE)
+        prefs = getSharedPreferences("nogracias_prefs", Context.MODE_PRIVATE) // MISMO NOMBRE
         Log.i(TAG, "📞 MyCallBlockerService STARTED - Ready to screen calls!")
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     override fun onScreenCall(callDetails: Call.Details) {
         // Verificar compatibilidad
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
@@ -45,20 +43,23 @@ class MyCallBlockerService : CallScreeningService() {
             val block = shouldBlock(normalized, savedPrefixes)
 
             val response = if (block) {
-                Log.w(TAG, "🚫 BLOCKING call from: $normalized (raw: $raw)")
+                Log.w(TAG, "🚫🚫🚫 ATTEMPTING TO BLOCK call from: $normalized (raw: $raw)")
 
-                // Respuesta específica para MIUI
+                // Respuesta de bloqueo MUY AGRESIVA
                 val builder = CallResponse.Builder()
                     .setDisallowCall(true)
                     .setRejectCall(true)
                     .setSkipNotification(true)
 
-                // MIUI a veces necesita estas configuraciones
+                // En emuladores, a veces necesitas configuraciones específicas
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    builder.setSkipCallLog(false) // En MIUI a veces funciona mejor en false
+                    builder.setSkipCallLog(true)
+                    builder.setSilenceCall(true)
                 }
 
-                builder.build()
+                val response = builder.build()
+                Log.w(TAG, "🚫 Block response: disallow=${response.disallowCall}, reject=${response.rejectCall}")
+                response
             } else {
                 Log.i(TAG, "✅ ALLOWING call from: $normalized")
                 CallResponse.Builder()
@@ -68,6 +69,15 @@ class MyCallBlockerService : CallScreeningService() {
 
             respondToCall(callDetails, response)
 
+            // Método de bloqueo adicional si el anterior falla
+            if (block) {
+                try {
+                    hangUpCallAlternative()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Alternative hang up failed", e)
+                }
+            }
+
         } catch (ex: Exception) {
             Log.e(TAG, "❌ Error processing call screening", ex)
             respondToCall(callDetails, CallResponse.Builder().setDisallowCall(false).build())
@@ -76,16 +86,19 @@ class MyCallBlockerService : CallScreeningService() {
 
     private fun getPrefixesFromStorage(): List<String> {
         return try {
+            // Leer directamente desde el formato simple
             val prefixString = prefs.getString("prefixes", "") ?: ""
             if (prefixString.isNotEmpty()) {
-                prefixString.split(",").filter { it.isNotEmpty() }
+                val simplePrefixes = prefixString.split(",").filter { it.isNotEmpty() }
+                Log.d(TAG, "Loaded ${simplePrefixes.size} prefixes: $simplePrefixes")
+                return simplePrefixes
             } else {
-                // Prefijos por defecto para testing
-                listOf("600", "5699284")
+                Log.d(TAG, "No prefixes found in storage")
+                return emptyList()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading prefixes", e)
-            listOf("600", "5699284")
+            return emptyList()
         }
     }
 
@@ -106,15 +119,6 @@ class MyCallBlockerService : CallScreeningService() {
             Log.d(TAG, "   No match: '$prefix' vs '$normalized'")
         }
 
-        // Números exactos hardcodeados para testing
-        val exactNumbers = listOf("56992849190", "992849190")
-        for (num in exactNumbers) {
-            if (normalized.endsWith(num)) {
-                Log.w(TAG, "🎯 EXACT MATCH! Number '$num' found in '$normalized'")
-                return true
-            }
-        }
-
         Log.i(TAG, "✓ Number not blocked: '$normalized'")
         return false
     }
@@ -128,5 +132,31 @@ class MyCallBlockerService : CallScreeningService() {
     override fun onDestroy() {
         super.onDestroy()
         Log.i(TAG, "📞 MyCallBlockerService STOPPED")
+    }
+
+    private fun hangUpCallAlternative() {
+        try {
+            Log.i(TAG, "🔨 Trying alternative hang up method...")
+
+            // Método 1: TelecomManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? android.telecom.TelecomManager
+                if (telecomManager?.isInCall == true) {
+                    telecomManager.endCall()
+                    Log.i(TAG, "✅ Call ended via TelecomManager")
+                    return
+                }
+            }
+
+            // Método 2: AudioManager - Silenciar
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            audioManager?.ringerMode = android.media.AudioManager.RINGER_MODE_SILENT
+            Log.i(TAG, "🔇 Phone silenced")
+
+        } catch (e: SecurityException) {
+            Log.w(TAG, "No permission for alternative methods: ${e.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Alternative hang up failed", e)
+        }
     }
 }
