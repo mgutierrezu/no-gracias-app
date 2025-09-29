@@ -27,8 +27,8 @@
         android:layout_height="wrap_content"
         android:checked="true"
         android:layout_marginEnd="16dp"
-        android:thumbTint="#4CAF50"
-        android:trackTint="#E8F5E8" />
+        android:thumbTint="#3abf28"
+        android:trackTint="#75876d" />
 
     <!-- Botón eliminar -->
     <Button

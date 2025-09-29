@@ -1,14 +1,23 @@
-package com.example.nogracias
+package com.gronorf.nogracias
 
+import android.Manifest
+import android.app.role.RoleManager
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.example.nogracias.model.PrefixItem
+import androidx.core.content.ContextCompat
+import com.gronorf.nogracias.model.PrefixItem
+import com.gronorf.nogracias.service.PhoneStateService
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -28,6 +37,22 @@ class MainActivity : AppCompatActivity() {
     private val prefixList = mutableListOf<PrefixItem>()
     private var isBlockingEnabled = true
 
+    private val callScreeningRoleLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        // Call screening permission completed
+    }
+
+    private val phonePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.all { it.value }
+
+        if (allGranted) {
+            requestCallScreeningRole()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -35,8 +60,105 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupListView()
         loadData()
+
+        checkFirstTimeAndLoadDefaults()
+
         setupListeners()
         updateUI()
+
+        checkFirstTimeAndShowPermissionDialog()
+
+        startBlockingService()
+    }
+
+    private fun checkFirstTimeAndLoadDefaults() {
+        val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val hasLoadedDefaults = sharedPrefs.getBoolean("defaults_loaded", false)
+
+        if (!hasLoadedDefaults) {
+            sharedPrefs.edit().putBoolean("defaults_loaded", true).apply()
+            loadDefaultPrefixes()
+        }
+    }
+
+    private fun checkFirstTimeAndShowPermissionDialog() {
+        val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val isFirstTime = sharedPrefs.getBoolean("first_time", true)
+
+        if (isFirstTime) {
+            sharedPrefs.edit().putBoolean("first_time", false).apply()
+            showPermissionDialog()
+        }
+    }
+
+    private fun showPermissionDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("No Gracias")
+            .setMessage("Para bloquear llamadas spam necesitamos:\n\n" +
+                    "1️⃣ Acceso al teléfono\n" +
+                    "2️⃣ Administrar llamadas spam\n\n" +
+                    "¿Continuar con la configuración?")
+            .setPositiveButton("Sí, configurar") { _, _ ->
+                requestAllPermissions()
+            }
+            .setNegativeButton("Más tarde") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun requestAllPermissions() {
+        val requiredPermissions = mutableListOf<String>()
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+            != PackageManager.PERMISSION_GRANTED) {
+            requiredPermissions.add(Manifest.permission.READ_PHONE_STATE)
+        }
+
+        if (requiredPermissions.isNotEmpty()) {
+            phonePermissionLauncher.launch(requiredPermissions.toTypedArray())
+        } else {
+            requestCallScreeningRole()
+        }
+    }
+
+    private fun requestCallScreeningRole() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(RoleManager::class.java)
+
+            if (roleManager.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING)) {
+                if (!roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) {
+                    val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
+                    callScreeningRoleLauncher.launch(intent)
+                }
+            }
+        }
+    }
+
+    private fun loadDefaultPrefixes() {
+        val defaultPrefixes = listOf("600", "809")
+
+        defaultPrefixes.forEach { prefix ->
+            val exists = prefixList.any { it.value == prefix }
+            if (!exists) {
+                val prefixItem = PrefixItem(prefix, true)
+                prefixList.add(prefixItem)
+            }
+        }
+
+        savePrefixes()
+        adapter.notifyDataSetChanged()
+        updateUI()
+    }
+
+    private fun startBlockingService() {
+        try {
+            val serviceIntent = Intent(this, PhoneStateService::class.java)
+            startForegroundService(serviceIntent)
+        } catch (e: Exception) {
+            showToast("Error starting protection: ${e.message}")
+        }
     }
 
     private fun initViews() {
@@ -70,52 +192,53 @@ class MainActivity : AppCompatActivity() {
 
         when {
             prefixText.isEmpty() -> {
-                showToast("Ingresa un prefijo")
+                showToast("Enter a prefix")
                 return
             }
-            !prefixText.matches(Regex("\\d+")) -> {
-                showToast("Solo números permitidos")
+            !prefixText.matches(Regex("^\\+?\\d+$")) -> {
+                showToast("Only numbers and + allowed")
                 return
             }
             prefixList.any { it.value == prefixText } -> {
-                showToast("El prefijo ya existe")
+                showToast("Prefix already exists")
                 return
             }
         }
 
-        val newPrefix = PrefixItem(prefixText, true)
-        prefixList.add(newPrefix)
-        adapter.notifyDataSetChanged()
+        val prefixItem = PrefixItem(prefixText, true)
+        prefixList.add(prefixItem)
 
+        adapter.notifyDataSetChanged()
         savePrefixes()
         etPrefix.text.clear()
         updateUI()
 
-        showToast("Prefijo '$prefixText' agregado")
+        showToast("Prefix '$prefixText' added")
     }
 
     fun removePrefix(position: Int) {
         if (position in 0 until prefixList.size) {
             val removedPrefix = prefixList[position].value
             prefixList.removeAt(position)
-            adapter.notifyDataSetChanged()
 
+            adapter.notifyDataSetChanged()
             savePrefixes()
             updateUI()
 
-            showToast("Prefijo '$removedPrefix' eliminado")
+            showToast("Prefix '$removedPrefix' removed")
         }
     }
 
     fun togglePrefix(position: Int, isActive: Boolean) {
         if (position in 0 until prefixList.size) {
-            prefixList[position].isActive = isActive
-            adapter.notifyDataSetChanged()
+            val currentPrefix = prefixList[position]
+            currentPrefix.isActive = isActive
 
+            adapter.notifyDataSetChanged()
             savePrefixes()
 
-            val status = if (isActive) "activado" else "desactivado"
-            showToast("Prefijo $status")
+            val status = if (isActive) "enabled" else "disabled"
+            showToast("Prefix ${currentPrefix.value} $status")
         }
     }
 
@@ -125,17 +248,17 @@ class MainActivity : AppCompatActivity() {
 
         when {
             !isBlockingEnabled -> {
-                tvStatus.text = "Bloqueo desactivado"
+                tvStatus.text = "Blocking disabled"
                 tvStatus.setBackgroundColor(0xFFF5F5F5.toInt())
                 tvStatus.setTextColor(0xFF757575.toInt())
             }
             activeCount == 0 -> {
-                tvStatus.text = "Sin prefijos activos"
+                tvStatus.text = "No active prefixes"
                 tvStatus.setBackgroundColor(0xFFFFF3E0.toInt())
                 tvStatus.setTextColor(0xFFFF9800.toInt())
             }
             else -> {
-                tvStatus.text = "Bloqueando $activeCount de $totalCount prefijos"
+                tvStatus.text = "Blocking $activeCount of $totalCount prefixes"
                 tvStatus.setBackgroundColor(0xFFF1F8E9.toInt())
                 tvStatus.setTextColor(0xFF4CAF50.toInt())
             }
@@ -158,22 +281,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun savePrefixes() {
         try {
-            // Guardar en formato complejo (para la app)
             val json = gson.toJson(prefixList)
             prefs.edit().putString("prefixes_list", json).apply()
 
-            // IMPORTANTE: Guardar también en formato simple (para el servicio)
             val activePrefixes = prefixList.filter { it.isActive }.map { it.value }
             val simpleJson = activePrefixes.joinToString(",")
             prefs.edit().putString("prefixes", simpleJson).apply()
 
-            android.util.Log.d("MainActivity", "Prefijos guardados:")
-            android.util.Log.d("MainActivity", "- Formato complejo: $json")
-            android.util.Log.d("MainActivity", "- Formato simple: $simpleJson")
-            android.util.Log.d("MainActivity", "- Prefijos activos: $activePrefixes")
-
         } catch (e: Exception) {
-            showToast("Error guardando: ${e.message}")
+            showToast("Error saving: ${e.message}")
         }
     }
 
@@ -195,7 +311,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         } catch (e: Exception) {
-            showToast("Error cargando: ${e.message}")
+            showToast("Error loading: ${e.message}")
         }
     }
 
@@ -203,7 +319,11 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
-    // Adapter personalizado para ListView
+    override fun onResume() {
+        super.onResume()
+        updateUI()
+    }
+
     inner class PrefixListAdapter(
         private val context: Context,
         private val items: MutableList<PrefixItem>
@@ -226,6 +346,7 @@ class MainActivity : AppCompatActivity() {
             val btnDelete = view.findViewById<Button>(R.id.btnDelete)
 
             tvPrefix.text = item.value
+
             switchPrefix.isChecked = item.isActive
 
             if (item.isActive) {

@@ -18,7 +18,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="NoGracias"
+            android:text="NoGracias (BETA)"
             android:textSize="28sp"
             android:textStyle="bold"
             android:textColor="#2C3E50" />
@@ -64,15 +64,11 @@
         <EditText
             android:id="@+id/etPrefix"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="Agregar prefijo..."
-            android:inputType="number"
-            android:textSize="16sp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:background="@android:color/transparent"
-            android:textColorHint="#9E9E9E" />
+            android:hint="Add prefix..."
+            android:inputType="phone"
+            android:maxLines="1" />
 
         <Button
             android:id="@+id/btnAdd"

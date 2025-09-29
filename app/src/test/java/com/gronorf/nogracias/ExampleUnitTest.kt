@@ -1,4 +1,4 @@
-package com.example.nogracias
+package com.gronorf.nogracias
 
 import org.junit.Test
 

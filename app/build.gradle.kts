@@ -1,63 +1,74 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
 }
 
 android {
-    namespace = "com.example.nogracias"
-    compileSdk = 36
+    namespace = "com.gronorf.nogracias"
+    compileSdk = 34  // Cambiado de 36 a 34 (más estable)
 
     defaultConfig {
-        applicationId = "com.example.nogracias"
-        minSdk = 26
-        targetSdk = 36
+        applicationId = "com.gronorf.nogracias"
+        minSdk = 26  // Volver a 26 para evitar problemas con adaptive icons
+        targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true  // Cambiado a true para optimizar
+            isShrinkResources = true  // Agregar para reducir tamaño
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            isDebuggable = false  // Asegurar que no es debuggable
+        }
+        debug {
+            isMinifyEnabled = false
+            isDebuggable = true
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     kotlinOptions {
         jvmTarget = "11"
     }
+
+    // Eliminar buildFeatures compose (no lo usas)
     buildFeatures {
-        compose = true
+        compose = false
+        buildConfig = true
+    }
+
+    // Configuración de firma (se añadirá después de crear keystore)
+    signingConfigs {
+        // release {
+        //     storeFile file("path/to/keystore.jks")
+        //     storePassword "your-keystore-password"
+        //     keyAlias "your-key-alias"
+        //     keyPassword "your-key-password"
+        // }
     }
 }
 
 dependencies {
-
+    // Core Android
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
-    implementation("com.google.code.gson:gson:2.13.2")
-    implementation("androidx.recyclerview:recyclerview:1.3.0")
     implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.recyclerview)
+
+    // JSON parsing
+    implementation("com.google.code.gson:gson:2.10.1")
+
+    // Testing (solo para debug)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

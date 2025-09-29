@@ -1,4 +1,4 @@
-package com.example.nogracias.model
+package com.gronorf.nogracias.model
 
 data class PrefixItem(
     val value: String,
